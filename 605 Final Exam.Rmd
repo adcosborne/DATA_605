@@ -1,0 +1,199 @@
+---
+title: "Data 605 Final"
+author: "Alejandro Osborne"
+date: "December 20, 2017"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r}
+library(ggplot2)
+library(MASS)
+library(caret)
+library(DT)
+library(reshape)
+library(corrplot)
+library(Rmisc)
+library(knitr)
+library(dplyr)
+library(psych)
+library(car)
+```
+
+```{r}
+htd <- read.csv("C:\\Users\\Alex O\\Downloads\\train.csv")
+X <- htd$GrLivArea
+Y <- htd$SalePrice
+```
+
+I chose GrLivArea: Above grade (ground) living area square feet, as the independent variable and now we create a subset with just X and Y:
+
+```{r}
+newhtd <- subset(htd, select = c(GrLivArea, SalePrice))
+names(newhtd) <- c("X","Y")
+```
+
+#Probability
+
+a.$\mathbf{P(X>x~|~Y>y)}$
+```{r}
+x <- quantile(X, probs = 0.25)
+y <- quantile(Y, probs = 0.5)
+x
+y
+```
+
+```{r}
+a <- length(newhtd$X[newhtd$X > x & newhtd$Y > y])/length(newhtd$Y[newhtd$Y > y])
+a
+```
+
+b. $P(X>x \; \& \; Y>y)$
+```{r}
+b <- length(newhtd$X[newhtd$X > x & newhtd$Y>y]) / 
+            nrow(newhtd)
+b
+```
+
+c. $P(X<x | Y>y)$
+```{r}
+c <- length(newhtd$X[newhtd$X < x & newhtd$Y > y]) / 
+      nrow(newhtd)
+c
+```
+
+II. Does splitting the training data in this fashion make them independent? In other words, does P(XY)=P(X)P(Y)P(XY)=P(X)P(Y)? Check mathematically, and then evaluate by running a Chi Square test for association. You might have to research this.
+
+```{r}
+p_xy <- nrow(subset(htd, htd$GrLivArea > x & htd$SalePrice > y)) / nrow(htd)
+p_xy
+```
+```{r}
+p_x <- nrow(subset(htd, htd$GrLivArea > x)) / nrow(htd)
+p_x
+```
+
+```{r}
+p_y <- nrow(subset(htd, htd$SalePrice > y)) / nrow(htd)
+p_y
+```
+
+```{r}
+p_x*p_y
+```
+This shows that splitting it in this fashion does not them independent
+
+Evaluate with Chi-Square Test:
+
+```{r}
+tab1 <- table(htd$GrLivArea, htd$SalePrice)
+chisq.test(tab1)
+```
+
+We reject the null due to this p value - X and Y are not independent.
+
+#Descriptive and Inferential Statistics
+
+```{r}
+summary(X)
+describe(X)
+hist(X)
+```
+
+```{r}
+summary(Y)
+describe(Y)
+hist(Y)
+```
+
+```{r}
+ggplot(htd, aes(x = X, y = Y)) + geom_point(color='purple') + labs(title = "Above grade (ground) living area square feet vs. Sale Price", x = "Above grade (ground) living area square feet", y = "Sale Price") + scale_y_continuous(labels = scales::comma)
+```
+There seems to be a strong correlation
+
+
+```{r}
+qplot(X,Y, data=newhtd) + stat_smooth(method=lm)
+```
+
+Box-Cox:
+
+```{r}
+summary(powerTransform(cbind(Y,X)~1, data=newhtd))
+```
+
+The estimated $\lambda$ values are both close to 0:
+
+```{r}
+lnY <- log(Y)
+lnX <- log(X)
+cor(lnY, lnX)
+```
+
+The correlation coefficient shows a strong relationship between the two transformed variables.
+
+#Linear Algebra and Correlation
+
+TotalBsmtSF: Total square feet of basement area
+X1stFlrSF: First Floor square feet
+LotArea: Total rooms above grade
+
+```{r}
+corrmatrix <- cor(htd[c("TotalBsmtSF","X1stFlrSF","LotArea","SalePrice")])
+corrmatrix
+```
+
+```{r}
+invcormat <- solve(corrmatrix)
+invcormat
+```  
+
+```{r}
+round(corrmatrix %*% invcormat, 15)
+```
+
+```{r}
+round(invcormat %*% corrmatrix, 15)
+```
+
+#Calculus-Based Probability & Statistics
+
+```{r}
+mylndist <- fitdistr(X, "lognormal")
+mylndist$estimate
+mylndist$loglik
+```
+
+```{r}
+set.seed(1)
+sample_sel <- rlnorm(n=1000, meanlog = mylndist$estimate["meanlog"], sdlog = mylndist$estimate["sdlog"])
+reald <- data.frame(GrLivingArea = X)
+selected_fit <- data.frame(GrLivingArea = sample_sel)
+reald$type <- "Real Data"; selected_fit$type <- "lognormal"; mytransd <- rbind(reald, selected_fit)
+ggplot(mytransd, aes(x=GrLivingArea,fill = type)) + geom_histogram(alpha = 0.5, aes(y = ..density..), position = 'identity') + labs(title = "Histogram of Real Data and Simmed Lognormals")
+```
+
+It is not a perfect fit by any means but we can see that the lognormal provides a more than adequate fit to the raw data.
+
+#Modeling
+
+Build some type of regression model and submit your model to the competition board.  Provide your complete model summary and results with analysis.  Report your Kaggle.com user name and score.
+
+```{r}
+lregmod <- lm(SalePrice ~ LotArea + OverallQual + OverallCond + TotalBsmtSF + X1stFlrSF + GrLivArea + BsmtFullBath + FullBath + GarageCars + GarageArea, data = htd)
+# summary of model
+summary(lregmod)
+```
+```{r}
+testd <- read.csv("C:\\Users\\Alex O\\Downloads\\test.csv")
+```
+
+```{r}
+predictor <- predict(lregmod, testd, type="response")
+datapredict <- data.frame(Id=names(predictor),SalePrice=predictor)
+write.csv(datapredict,"predictor.csv", row.names=FALSE)
+```
+
+-Kaggle Score = 1.09
+User Name = adcosborne
